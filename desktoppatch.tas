@@ -1,0 +1,113 @@
+; Maciej 'YTM/Elysium' Witkowiak
+;
+;10.12.1997
+; Changed DeskTop drive management to allow using all
+; four disk drives at once
+; SetDevice ($C2B0) must be patched (in two places) to
+; allow using #8-#16 as disk drives
+; This is for DeskTop128 2.0 but should fit into 64 version
+; after initial address change.
+; This is in first VLIR record which loads into $????, so
+; the offset is equal to: $????
+
+; this are functions from DeskTop
+; unpatched code should refer to them in similar order
+
+!set machine=128
+
+!source "inc/const.inc"
+!source "inc/jumptab.inc"
+!source "inc/geossym.inc"
+!source "inc/geosmac.acme.inc"
+
+!cpu 6502
+
+    !if (machine=128) {
+	!to "desktoppatch128.bin"
+	SETDEVICE  = $0EA0
+	FUNCTION1  = $3256
+	LIKECLOSE  = $37CE
+	FUNCTION2  = $4DDD
+		*= $5001
+    }
+
+		LDA #9
+		LDX driveType+2		;is there 3rd drive?
+		BEQ END_DRV		;no - exit
+		BIT sysRAMFlg		;is there REU to swap drivers?
+		BVC END_DRV		;no - exit
+		PHA
+		JSR LIKECLOSE		;close disk?
+		PLA
+		STA $16			;$16 - remember old drive #
+
+		JSR SETDEVICE
+
+		LDA driveType+3		;is there 4th drive?
+		BNE END_DRV2		;it is - swap again
+
+		LDA #11
+		JSR SETNUMB		;#11 = new 3rd
+
+		LDX #10
+		LDA $16
+		JSR SETNUMBER		;#10 = old
+
+		LDX #11
+		LDA #10
+		JSR SETNUMBER		;#10 = old
+
+GOODEND		LDA $16			;set new
+		JSR SETDEVICE
+
+		JSR FUNCTION1
+		JMP FUNCTION2
+END_DRV		RTS
+;---------------------------------------
+END_DRV2	LDA turboFlags+16-8
+		PHA
+		LDA driveType+16-8
+		PHA
+
+		LDA #$10		;set additional
+		JSR SETNUMB
+
+		LDX #10
+		LDA $16
+		JSR SETNUMBER		;#10 - old
+
+		LDX #11			;set 4th
+		LDA #10			;#11 - 4TH
+		JSR SETNUMBER
+
+		LDX #$10		;set last
+		LDA #11			;#11 - old
+		JSR SETNUMBER
+
+		PLA
+		STA driveType+16-8
+		PLA
+		STA turboFlags+16-8
+		JMP GOODEND
+
+; This function renumbers device
+SETNUMBER	PHA			;X - # before
+		TXA			;A - after
+		JSR SETDEVICE
+		PLA
+SETNUMB		TAX
+		LDA curDrive
+		PHA
+		TAY
+		LDA driveType-8,Y
+		PHA
+		TXA
+		JSR ChangeDiskDevice
+		LDY curDrive
+		PLA
+		STA driveType-8,Y
+		PLA
+		TAY
+		LDA #0
+		STA driveType-8,Y
+		RTS

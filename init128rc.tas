@@ -1,0 +1,216 @@
+;30.5.97, 24.7.97
+;23.9.97 - C128 version
+;more in December '97
+;17.05.98 - fixed driver swapper
+;22.08.99 - changed dirhead position
+;28.08.99 - single drive setup support
+;06.08.01 - ACME port, GEOS64/128 common
+
+!source "inc/const.inc"
+!source "inc/jumptab.inc"
+!source "inc/geossym.inc"
+!source "inc/geosmac.acme.inc"
+
+!cpu 6502
+
+!set machine		= 128			; 64 for C64, 128 for C128
+
+    !if (machine=64) {
+	SWAPDRVBASE = $9eaa
+	SETDEVBASE = $d6b0
+	!to "initrc.64"
+    } else {
+    	SWAPDRVBASE = $9f57
+	SETDEVBASE = $e5f5
+	!to "initrc.128"
+    }
+
+swapLength	= 5
+
+myDrvType	= $81		; disk type for my drive
+
+		*= $1000+2
+		
+		JMP initAsk
+;---------------------------------------
+initDialog	!byte DEF_DB_POS | 1
+		!byte DBTXTSTR, 10, 20
+		!word initDText
+		!byte DBGETSTRING, 10, 40, a0, 1
+		!byte NULL
+
+initDText	!byte BOLDON
+		!text "Erase RamCart (Y/N)?"
+		!byte PLAINTEXT, 0
+
+writeDialog	!byte DEF_DB_POS | 1
+		!byte DBTXTSTR, 10, 30
+		!word writeDText
+		!byte OK, DBI_X_2, DBI_Y_2
+		!byte NULL
+
+writeDText	!byte BOLDON
+		!text "Turn RamCart into WRITE MODE!"
+		!byte PLAINTEXT, 0
+
+txtBuffer	!byte 0,0
+initFeel	!byte 0
+;---------------------------------------
+initAsk		+LoadB txtBuffer, 0
+		+LoadW r0, initDialog
+		+LoadW a0, txtBuffer
+		JSR DoDlgBox
+		LDA txtBuffer
+		AND #%00011111
+		CMP #$19			;Y
+		BEQ yesInit
+		CMP #$0E			;N
+		BEQ noInit
+		BNE initAsk
+yesInit		LDA #0				; YES
+		!byte $2c
+noInit		LDA #1				; NO
+		STA initFeel
+
+writeTest	JSR InitForIO
+		+LoadW $DE00, 0
+		+MoveB $DF00, txtBuffer
+		+LoadB $DF00, $44
+		+MoveB $DF00, txtBuffer+1
+		+MoveB txtBuffer, $DF00
+		JSR DoneWithIO
+
+		+CmpBI txtBuffer+1, $44
+		BEQ writePassed
+
+		+LoadW r0, writeDialog
+		JSR DoDlgBox
+		JMP writeTest
+
+writePassed	LDA initFeel
+		BNE doInstall
+
+		;^JSR InitForIO
+LO		LDA #1
+		STA $DE00
+HI		LDA #0
+		STA $DE01
+		LDX #0
+		TXA
+LP0		STA $DF00,X
+		INX
+		BNE LP0
+		INC LO+1
+		BNE LP1
+		INC HI+1
+LP1		LDA HI+1
+		CMP #2
+		BNE LO
+
+		+LoadW $DE00, 1
+		LDX #0
+LP3		LDA BAM,X
+		STA $DF00,X
+		INX
+		BNE LP3
+		;^JSR DoneWithIO
+
+doInstall
+    !if (machine=64) {
+		LDX #1
+NonREU_1	LDA driveType,x
+		BEQ NonREU_2
+		INX
+		CPX #4
+		BNE NonREU_1
+		JMP finishInst
+NonREU_2	LDA #myDrvType
+		STA driveType,x
+    } else {
+		LDA driveType+1
+		BEQ InternalInst
+		CMP driveType
+		BEQ InternalInst
+
+		+LoadB driveType+2, myDrvType
+    }
+
+		+LoadB ramExpSize, (128/64)
+		+LoadB sysRAMFlg, %01000000
+
+		JSR i_MoveData
+		!word SETDEV			; SetDevice patch
+		!word SETDEVBASE
+		!word (DSKDRV-SETDEV)
+		JSR i_MoveData
+		!word SWAPDRV			; Swapper
+		!word SWAPDRVBASE
+		!word (SETDEV-SWAPDRV)
+
+		JSR i_MoveData			; swapout driver
+		!word DISK_BASE			; current to safe place
+		!word $2000
+		!word $0E00
+		JSR i_MoveData			; driver->current
+		!word DSKDRV
+		!word DISK_BASE
+		!word (swapLength*$0100)
+		JSR Swapper			; swapout our driver
+		JSR i_MoveData
+		!word $2000
+		!word DISK_BASE
+		!word $0E00			; restore current
+
+		JMP finishInst
+
+	!if (machine=128) {
+InternalInst
+		LDX #1				; insert in free driveType slot
+		LDA driveType+1
+		BEQ intInst_1
+		INX
+intInst_1	LDA #myDrvType
+		STA driveType,X
+
+		;+LoadW r0, DSKDRV
+		LDA #>DSKDRV
+		STA r0H
+		LDA #<DSKDRV
+		STA r0L
+		LDA #0
+		LDX #$D0			; bank0 swapped driver base
+		STA r1L
+		STX r1H
+		STA r2L
+		LDA #swapLength
+		STA r2H
+		LDX #1				; from bank1
+		STX r3L
+		DEX
+		STX r3H				; to bank0
+		JSR MoveBData
+	}
+
+finishInst	JMP EnterDeskTop
+
+;---------------------------------------
+BAM		!binary "bin/bam.ramc128",,2
+
+SWAPDRV
+		!pseudopc SWAPDRVBASE
+		!source "swapdrvramc.tas"
+		!realpc
+
+SETDEV
+		!pseudopc SETDEVBASE
+	!if (machine=64) {
+		!source "setdevice64.tas"
+	} else {
+		!source "setdevice128.tas"
+	}
+		!realpc
+
+DSKDRV
+		!pseudopc DISK_BASE
+		!source "drv/ramc1541-rc.tas"
+		!realpc

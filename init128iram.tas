@@ -1,0 +1,215 @@
+;30.5.97, 24.7.97
+;23.9.97 - C128 version
+;more in December '97
+;17.05.98 - fixed driver swapper
+;22.08.99 - changed dirhead position
+;27.08.99 - internal ram version
+;28.08.99 - single drive setup support
+;06.08.01 - ACME port, GEOS64/128 common
+
+!source "inc/const.inc"
+!source "inc/jumptab.inc"
+!source "inc/geossym.inc"
+!source "inc/geosmac.acme.inc"
+
+!cpu 6502
+
+!set useRamCart128=1		; 0 - true, !=0 - false
+				; if false: only internal ram is used	(128K)
+				; if true: internal ram and RamCart128 are used (256K)
+
+    !if (useRamCart128=0) {
+	!to "initiramrc.128"
+    } else {
+	!to "initiram.128"
+    }
+
+
+swapLength	= 7
+
+myDrvType	= $81		; disk type for my drive
+
+		*= $1000+2
+
+		LDX #0
+		STX r1L
+		STX r2L
+		INX
+		STX r2H
+		STX r3L
+		INX
+		STX r3H
+		;+LoadW r0, BAM
+		LDA #>BAM
+		STA r0H
+		LDA #<BAM
+		STA r0L
+		+LoadB r1H, 4
+		JSR MoveBData
+		LDX #0
+		TXA
+		STA r0L
+		STA r1L
+		STA r2L
+intInst_1	STA diskBlkBuf,X
+		INX
+		BNE intInst_1
+		DEX
+		STX diskBlkBuf+1
+		+LoadB r0H, >diskBlkBuf
+		+LoadB r1H, 5
+		LDX #1
+		STX r2H
+		STX r3L
+		INX
+		STX r3H
+		JSR MoveBData
+		+LoadB r1H, 9
+		JSR MoveBData
+
+;---------------------------------------
+
+                LDA ramExpSize
+                BEQ NonREUInst
+
+		LDX #0
+instLp		LDA driveType,x
+                BEQ REUInst_1
+                INX
+                CPX #4
+                BNE instLp
+		JMP finishInst
+
+REUInst_1	LDA #myDrvType
+		STA driveType,x
+
+;part below is extracted from GEOS Kernal
+		LDA SetDevDrivesTabL,x
+		STA SetDevTab + 2
+		LDA SetDevDrivesTabH,x
+		STA SetDevTab + 3
+		LDX #6
+REUInst_2	LDA SetDevTab,x
+		STA r0,x
+		DEX
+		BPL REUInst_2
+		JSR StashRAM
+REUInstEnd	JMP finishInst
+
+REUDskDrvSPC	=    $8300			; base for 4*DISK_DRV_LGH disk drivers
+
+SetDevTab
+		!word DSK
+		!word $0000
+		!word DISK_DRV_LGH
+		!byte $00
+
+SetDevDrivesTabL
+		!byte <REUDskDrvSPC+(0*DISK_DRV_LGH)
+		!byte <REUDskDrvSPC+(1*DISK_DRV_LGH)
+		!byte <REUDskDrvSPC+(2*DISK_DRV_LGH)
+		!byte <REUDskDrvSPC+(3*DISK_DRV_LGH)
+SetDevDrivesTabH
+		!byte >REUDskDrvSPC+(0*DISK_DRV_LGH)
+		!byte >REUDskDrvSPC+(1*DISK_DRV_LGH)
+		!byte >REUDskDrvSPC+(2*DISK_DRV_LGH)
+		!byte >REUDskDrvSPC+(3*DISK_DRV_LGH)
+
+NonREUInst
+		LDA driveType+1
+		BEQ InternalInst
+		CMP driveType
+		BEQ InternalInst
+
+;---------------------------------------
+
+; two different drivers, third one goes through own swapper
+ExternalInst
+		+LoadB driveType+2, myDrvType
+
+		+LoadB ramExpSize, (128/64)
+		+LoadB sysRAMFlg, %01000000
+
+		JSR i_MoveData
+		!word NEWDEV128			; SetDevice patch
+		!word $E5F5
+		!word (DSK-NEWDEV128)
+		JSR i_MoveData
+		!word SWPDRV128			; Swapper
+		!word $9F57
+		!word (NEWDEV128-SWPDRV128)
+
+		JSR i_MoveData			; swapout driver
+		!word DISK_BASE			; current to safe place
+		!word $2000
+		!word $0E00
+		JSR i_MoveData			; driver->current
+		!word DSK
+		!word DISK_BASE
+		!word (swapLength*$0100)
+		JSR Swapper			; swapout our driver
+		JSR i_MoveData
+		!word $2000
+		!word DISK_BASE
+		!word $0E00			; restore current
+
+		JMP finishInst
+
+;---------------------------------------
+
+InternalInst
+		LDX #1				; insert in free driveType slot
+		LDA driveType+1
+		BEQ intInst_2
+		INX
+intInst_2	LDA #myDrvType
+		STA driveType,X
+
+		;+LoadW r0, DSK
+		LDA #>DSK
+		STA r0H
+		LDA #<DSK
+		STA r0L
+		LDA #0
+		LDX #$D0			; bank0 swapped driver base
+		STA r1L
+		STX r1H
+		STA r2L
+		LDA #swapLength
+		STA r2H
+		LDX #1				; from bank1
+		STX r3L
+		DEX
+		STX r3H				; to bank0
+		JSR MoveBData
+
+finishInst
+		JMP EnterDeskTop
+
+;---------------------------------------
+
+BAM
+    !if (useRamCart128=0) {
+		!binary "bin/bam.ramc256",,2
+    } else {
+		!binary "bin/bam.iram128",,2
+    }
+
+SWPDRV128
+		!pseudopc $9F57
+		!source "swapdrv128iram.tas"
+		!realpc
+
+NEWDEV128
+		!pseudopc $E5F5
+		!source "setdevice128.tas"
+		!realpc
+
+DSK
+		!pseudopc $9000
+    !if (useRamCart128=0) {
+		!source "drv/ramc1541-iramrc.tas"
+    } else {
+		!source "drv/ramc1541-iram.tas"
+    }
+		!realpc

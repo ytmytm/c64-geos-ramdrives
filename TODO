@@ -1,0 +1,32 @@
+- NEED TO USE MY PATCHED DESKTOP WHEN MORE THAN 1 DISK DRIVE!!!
+- REMEMBER TO ALWAYS SET LOADADDRESS TO $eaea!!!
+- installer (->.cvt)
+- InstallDriveD should be run as last - after installing mine
+- more intelligent installer (take addresses from Kernal and relocate
+  the things)
+- swapper for unexpanded hdd64
+
+inithdd
+    - 128
+        - one drive OK
+        - two drive OK
+    - 64
+        - one drive ?
+        - two drive ?
+
+initiram
+(old IRAM ~ bad RAM, but IRAM+256k -- OK, need to check what DIR data is loaded)
+    - only IRAM
+        - one drive ~ bad RAM?
+        - two drive ~ bad RAM?
+    - RamCart
+        - one drive ~ bad RAM?
+        - two drive ~ bad RAM?
+
+initramc
+    - 128
+        - one drive OK
+        - two drive OK
+    - 64
+        - one drive ?
+        - two drive ?
