@@ -27,6 +27,8 @@
 ;05.8.2001 - changed IDE interface mode to CIA#3 style (easily can be changed to 8255 or any
 ;		port style), removed unneeded machine conditionals
 ;08.8.2001 - rewritten CalcBlksFree, added error reporting
+;09.8.2001 - adddirblock/getfreedirblk changes, should support 1024 files now
+;		small optimization and bugfix in SetNextFree, macroization
 
 ;proposed new layout:
 ;128 sectors per track
@@ -107,7 +109,10 @@ ReadLink		JMP _ReadLink			;904b
 ;---------------------------------------
 ; here are HDD-specific data
 
-OFF_LBA_IMAGE	!byte 92,$00,$00,$00	; int32 - offset to current image
+SIGNATURE	!text "YTM"		; 904E - for driver recognition
+
+OFF_LBA_IMAGE	!byte 92,$00,$00,$00	; int32 - LBA offset to current image
+OFF_LBA_SIZE	!byte $00,$0c,$00,$00	; int32 - total size of current image
 
 	!if (useCHS=0) {
 SPT		!byte 23		; Sectors Per Track
@@ -199,8 +204,7 @@ _GetNxtDirEntry
 		BNE GNDirEntry0
 		LDA borderFlag
 		BNE GNDirEntry1
-		LDA #$ff
-		STA borderFlag
+		+LoadB borderFlag, $ff
 		JSR GetBorder
 		+bnex GNDirEntry1
 		TYA
@@ -279,28 +283,31 @@ CFB_tab		!byte $00, $01, $01, $02, $01, $02, $02, $03
 		!byte $01, $02, $02, $03, $02, $03, $03, $04
 ;---------------------------------------
 ;in: r3=T&S, out: r3 = r6 = newT&S, pass through AllocateBlock
-__SetNextFree	+MoveW r3, r6
+__SetNextFree	+MoveB r3H, r6H
+		+MoveB r3L, r6L
+		STA zpBuff+1
+
 SNF_Loop	JSR FindBAMBit
-		BNE AlloBlk0
-		STY SNF_Search+2
+		BEQ SNF_LpCnt
+		JMP AlloBlk0
+SNF_LpCnt	STY SNF_Search+2
 		CPY #>curDirHead
 		BEQ SNF_Half
 		LDA #0
-		BEQ SNF_PutLast
+		!byte $2c
 SNF_Half	LDA #128+OFF_TO_BAM
-SNF_PutLast	STA zpBuff
+		STA zpBuff
 
 SNF_Search	LDA curDirHead,x
 		BNE SNF_FoundByte
 		INX
 		CPX zpBuff
 		BNE SNF_Search
-		LDA zpBuff
-		CMP #128+OFF_TO_BAM	; last BAM?
+		CPX #128+OFF_TO_BAM	; last BAM?
 		BEQ SNF_DiskFull
 		LDA r6L			; no - start from next round 16 tracks
 		AND #%11110000		; (forces BAM change)
-		+addv 16
+		+addv 17
 		STA r6L
 		+LoadB r6H, 0
 		BEQ SNF_Loop
@@ -317,8 +324,7 @@ SNF_Search2	LSR
 		; r7H - headerNum (in high nybble)
 		; X - offset (real or +OFF_TO_BAM if headerNum==last)
 		; Y - bit number
-SNF_FoundBit	LDA SNF_Search+2
-		CMP #>curDirHead
+SNF_FoundBit	+CmpBI SNF_Search+2, >curDirHead
 		BNE SNF_FndBitCont
 		TXA
 		+subv OFF_TO_BAM
@@ -340,7 +346,16 @@ SNF_FndBitCont	TXA
 		TYA
 		+add r3H
 		STA r3H
-		+MoveW r3, r6
+
+		+CmpBI r3L, DIR_TRACK	; if we finished on DIRTRACK
+		BNE SNF_End
+		+CmpBI zpBuff+1, DIR_TRACK	; we must have started on DIRTRACK
+		BEQ SNF_End
+		+LoadB r3L, DIR_TRACK+1		; if not - start again from next track
+		+LoadB r3H, 0
+		JMP __SetNextFree
+
+SNF_End		+MoveW r3, r6
 
 _AllocateBlock	JSR FindBAMBit
 		BEQ AlloBAMErr
@@ -454,10 +469,9 @@ GFDirBlk4	LDA diskBlkBuf,y
 		BCC GFDirBlk4
 		+LoadB r6L, 1
 		LDX #FULL_DIRECTORY
+		INC r10L
 		LDY r10L
-		INY
-		STY r10L
-		CPY #$12
+		CPY #128-1-1
 		BCC GFDirBlk11
 GFDirBlk5	+PopW r2
 		+PopB r6L
@@ -471,7 +485,11 @@ _AddDirBlock
 		+LoadB r3H, 0
 		JSR SetNextFree
 		+bnex ADirBlkEnd
-		+MoveW r3, diskBlkBuf
+		+CmpBI r3L, DIR_TRACK
+		BEQ ADirBlk_1
+		LDX #FULL_DIRECTORY
+		BNE ADirBlkEnd
+ADirBlk_1	+MoveW r3, diskBlkBuf
 		JSR WriteBuff
 		+bnex ADirBlkEnd
 		+MoveW r3, r1
@@ -565,10 +583,8 @@ __OpenDisk	JSR GetDirHead
 __PutDirHead	JSR SetDirHead
 		JSR InitForIO
 		JSR WriteBlock
-		LDA #126
-		STA r1H
-		LDA #>dir2Head
-		STA r4H
+		+LoadB r1H, 126
+		+LoadB r4H, >dir2Head
 		JSR WriteBlock
 		; any more headers
 		JMP DoneWithIO
@@ -576,10 +592,8 @@ __PutDirHead	JSR SetDirHead
 __GetDirHead	JSR SetDirHead
 		JSR InitForIO
 		JSR ReadBlock
-		LDA #126
-		STA r1H
-		LDA #>dir2Head
-		STA r4H
+		+LoadB r1H, 126
+		+LoadB r4H, >dir2Head
 		JSR ReadBlock
 		; any more headers
 		JMP DoneWithIO
@@ -603,6 +617,13 @@ SetDirHead	+LoadB r1L, DIR_TRACK
 		+LoadB r4H, (>curDirHead)
 		RTS
 ;---------------------------------------
+D_IRQHandler	PLA
+		TAY
+		PLA
+		TAX
+		PLA
+D_NMIHandler	RTI
+;---------------------------------------
 __InitForIO
 		PHP
 		+PopB tmpPS
@@ -617,14 +638,8 @@ __InitForIO
 		+LoadB grirq, %01111111
 		STA cia1base+13
 		STA cia2base+13
-		LDA #>D_IRQHandler
-		STA irqvec+1
-		LDA #<D_IRQHandler
-		STA irqvec
-		LDA #>D_NMIHandler
-		STA nmivec+1
-		LDA #<D_NMIHandler
-		STA nmivec
+		+LoadW irqvec, D_IRQHandler
+		+LoadW nmivec, D_NMIHandler
 		+LoadB cia2base+2, %00111111
 		+MoveB mobenble, tmpmobenble
 		+MoveB clkreg, tmpclkreg
@@ -635,13 +650,6 @@ __InitForIO
 		+LoadB cia2base+13, %10000001
 		+LoadB cia2base+14, %00001001
 		RTS
-;---------------------------------------
-D_IRQHandler	PLA
-		TAY
-		PLA
-		TAX
-		PLA
-D_NMIHandler	RTI
 ;---------------------------------------
 __DoneWithIO	SEI
 		+MoveB tmpmobenble, mobenble

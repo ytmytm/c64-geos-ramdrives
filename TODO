@@ -1,5 +1,6 @@
 - NEED TO USE MY PATCHED DESKTOP WHEN MORE THAN 1 DISK DRIVE!!!
 - REMEMBER TO ALWAYS SET LOADADDRESS TO $eaea!!!
+- initializer should exit with non-init after few seconds *hdd
 - installer (->.cvt)
 - InstallDriveD should be run as last - after installing mine
 - more intelligent installer (take addresses from Kernal and relocate
@@ -17,8 +18,8 @@ inithdd
 initiram
 (old IRAM ~ bad RAM, but IRAM+256k -- OK, need to check what DIR data is loaded)
     - only IRAM
-        - one drive ~ bad RAM?
-        - two drive ~ bad RAM?
+        - one drive ~ bad RAM? OK
+        - two drive ~ bad RAM? OK
     - RamCart
         - one drive ~ bad RAM?
         - two drive ~ bad RAM?

@@ -188,7 +188,7 @@ intInst_1	LDA #myDrvType
 		STA r1L
 		STX r1H
 		STA r2L
-		LDA #swapLength
+		LDA #swapLength+1
 		STA r2H
 		LDX #1				; from bank1
 		STX r3L
