@@ -275,5 +275,5 @@ SETDEV
 
 DSKDRV
 		!pseudopc DISK_BASE
-		!source "drv/ide-hdd.tas"
+		!source "drv/ide-hdd-8max.tas"
 		!realpc

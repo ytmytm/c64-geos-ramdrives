@@ -29,6 +29,8 @@
 ;08.8.2001 - rewritten CalcBlksFree, added error reporting
 ;09.8.2001 - adddirblock/getfreedirblk changes, should support 1024 files now
 ;		small optimization and bugfix in SetNextFree, macroization
+;13.8.2001 - fixed drive parameters for my Conner
+;17.8.2001 - moved register table to macro, this is sane
 
 ;proposed new layout:
 ;128 sectors per track
@@ -111,12 +113,12 @@ ReadLink		JMP _ReadLink			;904b
 
 SIGNATURE	!text "YTM"		; 904E - for driver recognition
 
-OFF_LBA_IMAGE	!byte 92,$00,$00,$00	; int32 - LBA offset to current image
+OFF_LBA_IMAGE	!byte 104,$00,$00,$00	; int32 - LBA offset to current image
 OFF_LBA_SIZE	!byte $00,$0c,$00,$00	; int32 - total size of current image
 
 	!if (useCHS=0) {
-SPT		!byte 23		; Sectors Per Track
-SPC		!word 92		; Sectors Per Cylinder = HEAD*SPT
+SPT		!byte 26		; Sectors Per Track
+SPC		!word 104		; Sectors Per Cylinder = HEAD*SPT
 	}
 ;---------------------------------------
 _ReadLink
@@ -857,17 +859,7 @@ WaitIDEBusy	LDX #IDE_Status
 		BNE WaitIDEBusy
 		RTS
 ;---------------------------------------
-IDE_RegTable
-		!byte %00011100		;data
-		!byte %10011100		;error
-		!byte %01011100		;sec. count
-		!byte %11011100		;sector
-		!byte %00111100		;cyll
-		!byte %10111100		;cylh
-		!byte %01111100		;head
-		!byte %11111100		;command/status
-		!byte %01111010		;status2
-		!byte %11111010		;active
+IDE_RegTable	+IDE_RegisterTable
 ;---------------------------------------
 borderFlag	=*	;!byte 0
 tmpmobenble	=*+1	;!byte 0

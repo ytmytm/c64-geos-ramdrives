@@ -4,10 +4,14 @@
 ; by Maciej 'YTM/Elysium' Witkowiak
 
 cia3base	= $d300
-cia3pa		= cia3base	; lower 8 bits data port
-cia3pb		= cia3base+1	; control port bits, straight connection, no inverters
+cia3pa		= cia3base	; control port bits, straight connection, no inverters
+cia3pb		= cia3base+1	; lower 8 bits data port
 cia3ddra	= cia3base+2	; data direction of port A, always output ($ff)
 cia3ddrb	= cia3base+3	; data direction of port B, input/output
+
+; upper 16 bit definitions
+upperdata	= cia1base	; upper 8 bits data port
+upperddr	= cia1base+2	; data direction for upper 8 bits port, input/output
 
 ; remaining 12 registers of CIA#3 are unused by IDE interface
 
@@ -45,13 +49,15 @@ IDE_Control	= 9
 ; index this table with register number to get register
 ; addresses, /rw and /wr lines are
 ; inactive here
-;         .byte %00011100 ;data
-;         .byte %10011100 ;error
-;         .byte %01011100 ;sec. count
-;         .byte %11011100 ;sector
-;         .byte %00111100 ;cyll
-;         .byte %10111100 ;cylh
-;         .byte %01111100 ;head
-;         .byte %11111100 ;command/status
-;         .byte %01111010 ;status2
-;         .byte %11111010 ;active
+	    !macro IDE_RegisterTable	{
+	    !byte %00011100 ;data
+	    !byte %10011100 ;error
+            !byte %01011100 ;sec. count
+            !byte %11011100 ;sector
+            !byte %00111100 ;cyll
+            !byte %10111100 ;cylh
+            !byte %01111100 ;head
+            !byte %11111100 ;command/status
+            !byte %01111010 ;status2
+            !byte %11111010 ;active
+	    }

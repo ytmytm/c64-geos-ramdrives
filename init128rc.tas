@@ -26,6 +26,7 @@
     }
 
 swapLength	= 5
+firstSwapBlock  = 6
 
 myDrvType	= $81		; disk type for my drive
 

@@ -8,7 +8,7 @@
 ;directory
 
 ;swapLength	= 5
-firstSwapBlock  = 6
+;firstSwapBlock  = 6
 
 ;		*= $9F57	;$9EAA - GEOS 64
 				;$9F57 - GEOS 128
