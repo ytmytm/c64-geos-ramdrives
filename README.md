@@ -8,6 +8,7 @@ Maciej 'YTM/Elysium' Witkowiak
 This is the source code for installer and drivers for GEOS 64/128 to utilize extra RAM as additional virtual disk drive. It is intended for setups *without REU*.
 
 This source code can be assembled with ACME crossassembler into CVT file and put on GEOS disk image with c1541 tool (from VICE emulator).
+http://sourceforge.net/projects/acme-crossass/
 
 It should be easy to adapt this software to support any other kind of memory expansion as a RAM drive.
 
